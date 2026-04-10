@@ -17,6 +17,18 @@ import {
 const HYPERLANE_FEE_TIMEOUT_MS = 4_000
 const HYPERLANE_GRAPHQL_API = 'https://api.hyperlane.xyz/v1/graphql'
 const HYPERLANE_ROUTE_WHITELIST = ['USDC/eclipsemainnet', 'USDT/eclipsemainnet', 'ETH/viction'] as const
+const HYPERLANE_SUPPORTED_CHAIN_NAMES = [
+  'arbitrum',
+  'avalanche',
+  'base',
+  'ethereum',
+  'hyperevm',
+  'linea',
+  'monad',
+  'optimism',
+  'polygon',
+  'unichain',
+] as const
 const HYPERLANE_CHAIN_NAME_BY_CHAIN_ID: Partial<Record<ChainId, string>> = {
   [ChainId.ARBITRUM]: 'arbitrum',
   [ChainId.AVAXMAINNET]: 'avalanche',
@@ -38,6 +50,9 @@ const HYPERLANE_CHAIN_NAME_BY_CHAIN_ID: Partial<Record<ChainId, string>> = {
 const HYPERLANE_CHAIN_ID_BY_CHAIN_NAME = Object.fromEntries(
   Object.entries(HYPERLANE_CHAIN_NAME_BY_CHAIN_ID).map(([chainId, chainName]) => [chainName, Number(chainId)]),
 ) as Record<string, ChainId>
+const HYPERLANE_SUPPORTED_CHAIN_IDS = HYPERLANE_SUPPORTED_CHAIN_NAMES.map(
+  chainName => HYPERLANE_CHAIN_ID_BY_CHAIN_NAME[chainName],
+)
 
 type HyperlaneToken = {
   addressOrDenom: string
@@ -153,7 +168,10 @@ const getHyperlaneRuntime = () => {
       const routeConfigs: Record<string, HyperlaneRouteConfig> = Object.fromEntries(
         HYPERLANE_ROUTE_WHITELIST.flatMap(routeId => {
           const routeConfig = registry.warpRouteConfigs[routeId]
-          if (!routeConfig) return []
+          if (!routeConfig) {
+            console.warn(`[Hyperlane] Whitelisted route ${routeId} is missing from installed registry package`)
+            return []
+          }
 
           const tokens = routeConfig.tokens
             .filter(token => token.chainName in HYPERLANE_CHAIN_ID_BY_CHAIN_NAME)
@@ -190,7 +208,10 @@ const getHyperlaneRuntime = () => {
         routeConfigs,
         warpCore,
       }
-    })()
+    })().catch(error => {
+      hyperlaneRuntimePromise = undefined
+      throw error
+    })
   }
 
   return hyperlaneRuntimePromise
@@ -200,16 +221,14 @@ const getTokenAddress = (token?: Currency) => {
   if (!token) return ''
 
   return (
-    ('isNative' in token && token.isNative ? token.symbol : undefined) ||
     ('wrapped' in token ? token.wrapped.address : undefined) ||
     ('address' in token ? token.address : undefined) ||
     ('id' in token ? token.id : undefined) ||
     ('assetId' in token ? token.assetId : undefined) ||
+    ('isNative' in token && token.isNative ? token.symbol : undefined) ||
     ''
   )
 }
-
-const isUsdc = (token?: Currency) => token?.symbol?.toUpperCase() === 'USDC' && token.decimals === 6
 
 const addressesEqual = (a?: string | null, b?: string | null) => {
   if (!a || !b) return false
@@ -219,7 +238,7 @@ const addressesEqual = (a?: string | null, b?: string | null) => {
 }
 
 const tokenMatchesCurrency = (token: HyperlaneToken | undefined | null, currency?: Currency) => {
-  if (!token || !currency || !isUsdc(currency)) return false
+  if (!token || !currency) return false
 
   const currencyAddress = getTokenAddress(currency)
   return (
@@ -352,7 +371,7 @@ export class HyperlaneAdapter extends BaseSwapAdapter {
   }
 
   getSupportedChains(): Chain[] {
-    return [...new Set(Object.values(HYPERLANE_CHAIN_ID_BY_CHAIN_NAME))]
+    return HYPERLANE_SUPPORTED_CHAIN_IDS
   }
 
   getSupportedTokens(_sourceChain: Chain, _destChain: Chain): Currency[] {
@@ -366,8 +385,8 @@ export class HyperlaneAdapter extends BaseSwapAdapter {
       'chainId' in tokenIn &&
       'chainId' in tokenOut &&
       tokenIn.chainId !== tokenOut.chainId &&
-      !!getHyperlaneChainName(tokenIn.chainId) &&
-      !!getHyperlaneChainName(tokenOut.chainId)
+      HYPERLANE_SUPPORTED_CHAIN_IDS.includes(tokenIn.chainId as ChainId) &&
+      HYPERLANE_SUPPORTED_CHAIN_IDS.includes(tokenOut.chainId as ChainId)
     )
   }
 
