@@ -14,15 +14,21 @@ import {
   SwapStatus,
 } from './BaseSwapAdapter'
 
-const HYPERLANE_SUPPORTED_ROUTE = 'USDC/mainnet-cctp'
 const HYPERLANE_FEE_TIMEOUT_MS = 4_000
 const HYPERLANE_GRAPHQL_API = 'https://api.hyperlane.xyz/v1/graphql'
-const BASE_USDC_COLLATERAL_TOKEN = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913'
-const ARBITRUM_USDC_COLLATERAL_TOKEN = '0xaf88d065e77c8cC2239327C5EDb3A432268e5831'
+const HYPERLANE_ROUTE_EXCLUDE_PATTERN = /stage|staging|testnet/i
 const HYPERLANE_CHAIN_NAME_BY_CHAIN_ID: Partial<Record<ChainId, string>> = {
   [ChainId.ARBITRUM]: 'arbitrum',
+  [ChainId.AVAXMAINNET]: 'avalanche',
   [ChainId.BASE]: 'base',
+  [ChainId.MAINNET]: 'ethereum',
+  [ChainId.MATIC]: 'polygon',
+  [ChainId.OPTIMISM]: 'optimism',
+  [ChainId.UNICHAIN]: 'unichain',
 }
+const HYPERLANE_CHAIN_ID_BY_CHAIN_NAME = Object.fromEntries(
+  Object.entries(HYPERLANE_CHAIN_NAME_BY_CHAIN_ID).map(([chainId, chainName]) => [chainName, Number(chainId)]),
+) as Record<string, ChainId>
 
 type HyperlaneToken = {
   addressOrDenom: string
@@ -32,6 +38,17 @@ type HyperlaneToken = {
   symbol: string
 }
 
+type HyperlaneRouteConfigToken = {
+  addressOrDenom?: string
+  chainName: string
+  collateralAddressOrDenom?: string
+  connections?: { token: string }[]
+}
+
+type HyperlaneRouteConfig = {
+  tokens: HyperlaneRouteConfigToken[]
+}
+
 type HyperlaneFeeEstimate = {
   interchainQuote: { amount: bigint; token: { symbol: string } }
   localQuote: { amount: bigint; token: { symbol: string } }
@@ -39,6 +56,7 @@ type HyperlaneFeeEstimate = {
 }
 
 type HyperlaneRuntime = {
+  routeConfigs: Record<string, HyperlaneRouteConfig>
   warpCore: {
     estimateTransferRemoteFees: (params: {
       destination: string
@@ -80,15 +98,60 @@ const loadModule = (moduleName: string) =>
 
 let hyperlaneRuntimePromise: Promise<HyperlaneRuntime> | undefined
 
+const mergeRouteConfigs = (routeConfigs: HyperlaneRouteConfig[]): HyperlaneRouteConfig => {
+  const mergedTokens = new Map<string, HyperlaneRouteConfigToken>()
+
+  for (const routeConfig of routeConfigs) {
+    for (const token of routeConfig.tokens) {
+      const key = `${token.chainName}|${token.addressOrDenom || ''}`
+      const existing = mergedTokens.get(key)
+      if (!existing) {
+        mergedTokens.set(key, {
+          ...token,
+          connections: [...(token.connections || [])],
+        })
+        continue
+      }
+
+      const connections = new Map(
+        [...(existing.connections || []), ...(token.connections || [])].map(connection => [
+          connection.token,
+          connection,
+        ]),
+      )
+
+      mergedTokens.set(key, {
+        ...existing,
+        ...token,
+        connections: [...connections.values()],
+      })
+    }
+  }
+
+  return { tokens: [...mergedTokens.values()] }
+}
+
 const getHyperlaneRuntime = () => {
   if (!hyperlaneRuntimePromise) {
-    hyperlaneRuntimePromise = (async () => {
-      const registry = await loadModule('@hyperlane-xyz/registry')
+    hyperlaneRuntimePromise = (async (): Promise<HyperlaneRuntime> => {
+      const registry = (await loadModule('@hyperlane-xyz/registry')) as {
+        chainAddresses: Record<string, { mailbox: string }>
+        chainMetadata: Record<string, Record<string, unknown>>
+        warpRouteConfigs: Record<string, HyperlaneRouteConfig>
+      }
       const sdk = await loadModule('@hyperlane-xyz/sdk')
 
-      const registryRouteConfig = registry.warpRouteConfigs[HYPERLANE_SUPPORTED_ROUTE]
+      const routeConfigs: Record<string, HyperlaneRouteConfig> = Object.fromEntries(
+        Object.entries(registry.warpRouteConfigs).filter(
+          ([routeId, routeConfig]) =>
+            !HYPERLANE_ROUTE_EXCLUDE_PATTERN.test(routeId) &&
+            routeConfig.tokens.every(token => token.chainName in HYPERLANE_CHAIN_ID_BY_CHAIN_NAME),
+        ),
+      )
       const routeChainNames = Array.from(
-        new Set<string>(registryRouteConfig.tokens.map((token: { chainName: string }) => token.chainName)),
+        new Set<string>(
+          Object.values(routeConfigs).flatMap(routeConfig => routeConfig.tokens.map(token => token.chainName)),
+        ),
       )
       const metadata = Object.fromEntries(
         routeChainNames.map(chainName => [
@@ -101,9 +164,10 @@ const getHyperlaneRuntime = () => {
       )
 
       const multiProvider = new sdk.MultiProtocolProvider(metadata)
-      const warpCore = sdk.WarpCore.FromConfig(multiProvider, registryRouteConfig)
+      const warpCore = sdk.WarpCore.FromConfig(multiProvider, mergeRouteConfigs(Object.values(routeConfigs)))
 
       return {
+        routeConfigs,
         warpCore,
       }
     })()
@@ -152,21 +216,40 @@ const resolveRoute = async (params: Pick<QuoteParams, 'fromChain' | 'toChain' | 
   const destination = getHyperlaneChainName(params.toChain)
   if (!origin || !destination) return undefined
 
-  const { warpCore } = await getHyperlaneRuntime()
+  const { routeConfigs, warpCore } = await getHyperlaneRuntime()
   const originTokenAddress = getTokenAddress(params.fromToken)
   const originTokens = warpCore.getTokensForRoute(origin, destination)
   const originToken =
     warpCore.findToken(origin, originTokenAddress) ||
-    originTokens.find(token => addressesEqual(token.collateralAddressOrDenom, originTokenAddress))
+    originTokens.find((token: HyperlaneToken) => addressesEqual(token.collateralAddressOrDenom, originTokenAddress))
   const destinationToken = originToken?.getConnectionForChain(destination)?.token
 
   if (!originToken || !tokenMatchesCurrency(destinationToken, params.toToken)) return undefined
+
+  const routeId = Object.entries(routeConfigs).find(([, routeConfig]) => {
+    const routeOriginToken = routeConfig.tokens.find(
+      token =>
+        token.chainName === origin &&
+        (addressesEqual(token.addressOrDenom, originToken.addressOrDenom) ||
+          addressesEqual(token.collateralAddressOrDenom, originToken.collateralAddressOrDenom)),
+    )
+    const routeDestinationToken = routeConfig.tokens.find(
+      token =>
+        token.chainName === destination &&
+        (addressesEqual(token.addressOrDenom, destinationToken?.addressOrDenom) ||
+          addressesEqual(token.collateralAddressOrDenom, destinationToken?.collateralAddressOrDenom)),
+    )
+    return routeOriginToken && routeDestinationToken
+  })?.[0]
+
+  if (!routeId) return undefined
 
   return {
     destination,
     destinationToken: destinationToken as HyperlaneToken,
     origin,
     originToken,
+    routeId,
   }
 }
 
@@ -249,7 +332,7 @@ export class HyperlaneAdapter extends BaseSwapAdapter {
   }
 
   getSupportedChains(): Chain[] {
-    return [ChainId.BASE, ChainId.ARBITRUM]
+    return [...new Set(Object.values(HYPERLANE_CHAIN_ID_BY_CHAIN_NAME))]
   }
 
   getSupportedTokens(_sourceChain: Chain, _destChain: Chain): Currency[] {
@@ -262,19 +345,16 @@ export class HyperlaneAdapter extends BaseSwapAdapter {
     return (
       'chainId' in tokenIn &&
       'chainId' in tokenOut &&
-      tokenIn.chainId === ChainId.BASE &&
-      tokenOut.chainId === ChainId.ARBITRUM &&
-      isUsdc(tokenIn) &&
-      isUsdc(tokenOut) &&
-      addressesEqual(getTokenAddress(tokenIn), BASE_USDC_COLLATERAL_TOKEN) &&
-      addressesEqual(getTokenAddress(tokenOut), ARBITRUM_USDC_COLLATERAL_TOKEN)
+      tokenIn.chainId !== tokenOut.chainId &&
+      !!getHyperlaneChainName(tokenIn.chainId) &&
+      !!getHyperlaneChainName(tokenOut.chainId)
     )
   }
 
   async getQuote(params: QuoteParams): Promise<NormalizedQuote> {
     const route = await resolveRoute(params)
     if (!route) {
-      throw new Error('Hyperlane POC only supports the Base USDC to Arbitrum USDC route.')
+      throw new Error('No supported Hyperlane route found for the selected chain and token pair.')
     }
 
     let feeEstimate: HyperlaneFeeEstimate | undefined
@@ -332,7 +412,7 @@ export class HyperlaneAdapter extends BaseSwapAdapter {
       rawQuote: {
         type: 'warp-core',
         source: 'hyperlane-registry',
-        route: HYPERLANE_SUPPORTED_ROUTE,
+        route: route.routeId,
         sourceChain: route.origin,
         destinationChain: route.destination,
         sourceToken: route.originToken.addressOrDenom,
