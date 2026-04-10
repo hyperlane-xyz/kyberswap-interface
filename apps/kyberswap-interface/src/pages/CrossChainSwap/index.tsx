@@ -277,7 +277,7 @@ function CrossChainSwap() {
             'tokenOut',
             toChainId && isEvmChain(toChainId)
               ? (c.isNative ? c.symbol : c.address) || c.wrapped.address
-              : (currency as NearToken).assetId,
+              : (currency as any).assetId || (currency as SolanaToken).id,
           )
           setSearchParams(searchParams)
         }}

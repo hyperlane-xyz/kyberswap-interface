@@ -1,6 +1,7 @@
 import {
   AcrossAdapter,
   DeBridgeAdapter,
+  HyperlaneAdapter,
   KyberSwapAdapter,
   LifiAdapter,
   MayanAdapter,
@@ -29,6 +30,7 @@ export class CrossChainSwapFactory {
   private static ksInstance: KyberSwapAdapter
   private static orbiterInstance: OrbiterAdapter
   private static bungeeInstance: BungeeAdapter
+  private static hyperlaneInstance: HyperlaneAdapter
 
   // Get or create Across adapter
   static getAcrossAdapter(): AcrossAdapter {
@@ -116,6 +118,13 @@ export class CrossChainSwapFactory {
     return CrossChainSwapFactory.bungeeInstance
   }
 
+  static getHyperlaneAdapter(): HyperlaneAdapter {
+    if (!CrossChainSwapFactory.hyperlaneInstance) {
+      CrossChainSwapFactory.hyperlaneInstance = new HyperlaneAdapter()
+    }
+    return CrossChainSwapFactory.hyperlaneInstance
+  }
+
   // Get all registered adapters
   static getAllAdapters(): SwapProvider[] {
     return [
@@ -131,6 +140,7 @@ export class CrossChainSwapFactory {
       CrossChainSwapFactory.getKsApdater(),
       // CrossChainSwapFactory.getOrbiterAdapter(),
       CrossChainSwapFactory.getBungeeAdapter(),
+      CrossChainSwapFactory.getHyperlaneAdapter(),
     ]
   }
 
@@ -161,6 +171,8 @@ export class CrossChainSwapFactory {
         return CrossChainSwapFactory.getOrbiterAdapter()
       case 'bungee':
         return CrossChainSwapFactory.getBungeeAdapter()
+      case 'hyperlane':
+        return CrossChainSwapFactory.getHyperlaneAdapter()
       default:
         return undefined
     }
