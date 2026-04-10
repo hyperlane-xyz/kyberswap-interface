@@ -16,15 +16,24 @@ import {
 
 const HYPERLANE_FEE_TIMEOUT_MS = 4_000
 const HYPERLANE_GRAPHQL_API = 'https://api.hyperlane.xyz/v1/graphql'
-const HYPERLANE_ROUTE_EXCLUDE_PATTERN = /stage|staging|testnet/i
+const HYPERLANE_ROUTE_WHITELIST = ['USDC/eclipsemainnet', 'USDT/eclipsemainnet', 'ETH/viction'] as const
 const HYPERLANE_CHAIN_NAME_BY_CHAIN_ID: Partial<Record<ChainId, string>> = {
   [ChainId.ARBITRUM]: 'arbitrum',
   [ChainId.AVAXMAINNET]: 'avalanche',
   [ChainId.BASE]: 'base',
+  [ChainId.BLAST]: 'blast',
+  [ChainId.BERA]: 'berachain',
+  [ChainId.HYPEREVM]: 'hyperevm',
+  [ChainId.LINEA]: 'linea',
   [ChainId.MAINNET]: 'ethereum',
+  [ChainId.MONAD]: 'monad',
+  [ChainId.MANTLE]: 'mantle',
   [ChainId.MATIC]: 'polygon',
   [ChainId.OPTIMISM]: 'optimism',
+  [ChainId.SCROLL]: 'scroll',
+  [ChainId.SONIC]: 'sonic',
   [ChainId.UNICHAIN]: 'unichain',
+  [ChainId.ZKSYNC]: 'zksync',
 }
 const HYPERLANE_CHAIN_ID_BY_CHAIN_NAME = Object.fromEntries(
   Object.entries(HYPERLANE_CHAIN_NAME_BY_CHAIN_ID).map(([chainId, chainName]) => [chainName, Number(chainId)]),
@@ -142,11 +151,22 @@ const getHyperlaneRuntime = () => {
       const sdk = await loadModule('@hyperlane-xyz/sdk')
 
       const routeConfigs: Record<string, HyperlaneRouteConfig> = Object.fromEntries(
-        Object.entries(registry.warpRouteConfigs).filter(
-          ([routeId, routeConfig]) =>
-            !HYPERLANE_ROUTE_EXCLUDE_PATTERN.test(routeId) &&
-            routeConfig.tokens.every(token => token.chainName in HYPERLANE_CHAIN_ID_BY_CHAIN_NAME),
-        ),
+        HYPERLANE_ROUTE_WHITELIST.flatMap(routeId => {
+          const routeConfig = registry.warpRouteConfigs[routeId]
+          if (!routeConfig) return []
+
+          const tokens = routeConfig.tokens
+            .filter(token => token.chainName in HYPERLANE_CHAIN_ID_BY_CHAIN_NAME)
+            .map(token => ({
+              ...token,
+              connections: token.connections?.filter(routeConnection => {
+                const parsedConnection = sdk.parseTokenConnectionId(routeConnection.token)
+                return parsedConnection.chainName in HYPERLANE_CHAIN_ID_BY_CHAIN_NAME
+              }),
+            }))
+
+          return tokens.length >= 2 ? [[routeId, { ...routeConfig, tokens }]] : []
+        }),
       )
       const routeChainNames = Array.from(
         new Set<string>(
