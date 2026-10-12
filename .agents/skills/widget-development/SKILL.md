@@ -1,7 +1,7 @@
 ---
-description: Widget packages development guidelines
-globs: ["packages/*-widgets/**/*"]
-alwaysApply: false
+name: widget-development
+description: Apply KyberSwap widget conventions when editing packages/*-widgets, including
+  exports, stores, builds, and public APIs.
 ---
 
 # Widget Development Rules
@@ -23,7 +23,7 @@ packages/{widget-name}/
 ├── package.json
 ├── tsconfig.json
 ├── vite.config.ts
-└── CLAUDE.md            # Package-specific instructions
+└── AGENTS.md            # Package-specific instructions
 ```
 
 ## Export Rules

@@ -1,8 +1,14 @@
+---
+name: review
+description: Review requested files or uncommitted changes for correctness, quality,
+  and security.
+---
+
 # Code Review
 
 Perform a thorough code review.
 
-**Target**: $ARGUMENTS
+**Target**: the directory, feature, or files supplied in the request
 
 ## Instructions
 
@@ -15,7 +21,7 @@ Perform a thorough code review.
 ### Code Quality
 - TypeScript types are correct (no unjustified `any`)
 - Error handling is appropriate
-- Follows project conventions (see CLAUDE.md)
+- Follows project conventions (see AGENTS.md)
 
 ### React & Performance
 - Hooks follow rules of hooks with correct dependency arrays

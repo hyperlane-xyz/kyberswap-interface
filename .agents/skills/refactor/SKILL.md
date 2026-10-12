@@ -1,8 +1,14 @@
+---
+name: refactor
+description: Refactor requested code while preserving behavior and following project
+  conventions.
+---
+
 # Refactor Code
 
 Refactor the specified code while maintaining functionality.
 
-**Target**: $ARGUMENTS
+**Target**: the directory, feature, or files supplied in the request
 
 ## Instructions
 
@@ -17,7 +23,7 @@ Refactor the specified code while maintaining functionality.
 - **Preserve Behavior**: All existing functionality must work identically
 - **Improve Readability**: Code should be easier to understand
 - **Reduce Complexity**: Simplify where possible
-- **Follow Patterns**: Match existing codebase conventions from CLAUDE.md
+- **Follow Patterns**: Match existing codebase conventions from AGENTS.md
 
 ## Output
 

@@ -75,3 +75,84 @@ Format all modified files with Prettier. Do **NOT** present code changes as comp
   - `formatDisplayNumber()`, `formatTokenAmount()`, `formatCurrency()`, `formatNumber()`, `formatWei()`, `formatAprNumber()` from `@kyberswap/utils`
   - `formatTokenBalance()`, `formatBigLiquidity()`, `formatLongNumber()` from `utils/formatBalance.ts`
 - Do **not** use deprecated formatters (`formatDollarAmount`, `formattedNum`, `formatCurrencyAmount`).
+
+You are operating in a pnpm-workspace + turbo monorepo.
+
+Rules:
+
+- Follow existing code patterns.
+- Keep diffs minimal.
+- Avoid dependency/tooling changes unless requested.
+- Avoid changing lockfiles unless necessary.
+
+When responding:
+
+- Provide file paths + code.
+- Provide a short manual test plan.
+
+# KyberSwap Development Rules
+
+## Package Manager
+
+- Use `pnpm` exclusively (not npm or yarn)
+- Run `pnpm build-package` after modifying any shared package
+
+## TypeScript
+
+- Strict mode enabled - no `any` types without justification
+- Use explicit return types for exported functions
+- Prefer `interface` over `type` for object shapes
+
+## React Patterns
+
+- Functional components only (no class components)
+- Use hooks for all state and side effects
+- Destructure props in function signature
+
+## Styling
+
+- Use styled-components exclusively
+- No inline styles, CSS modules, or Tailwind
+- Theme values from `src/theme`
+
+## Imports
+
+Order imports as follows:
+
+1. React and external libraries
+2. Internal packages (`@kyberswap/*`)
+3. Local absolute imports
+4. Relative imports
+5. Type imports
+6. Style imports
+
+## State Management
+
+- Redux Toolkit for global app state
+- RTK Query for API/server state
+- Zustand for widget-local state
+- useState for component-local state
+
+## File Naming
+
+- Components: `PascalCase.tsx`
+- Hooks: `useCamelCase.ts`
+- Utils: `camelCase.ts`
+- Constants: `SCREAMING_SNAKE_CASE`
+
+## Before Committing
+
+Always run:
+
+```bash
+pnpm lint
+pnpm type-check
+```
+
+## Widget Packages
+
+When working in `packages/*-widgets/`, read `.agents/skills/widget-development/SKILL.md` before editing or reviewing.
+
+## Agent Skills
+
+Shared skills live in `.agents/skills/<name>/SKILL.md` and follow the [Agent Skills standard](https://agentskills.io/specification). Read a matching skill before using its workflow. Claude Code discovers the same files through the `.claude/skills` symlink; edit the files in `.agents/skills`. Use Claude Code v2.1.277 or later for native `AGENTS.md` loading.

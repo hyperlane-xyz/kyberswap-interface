@@ -1,8 +1,14 @@
+---
+name: review-pr
+description: Review a GitHub pull request for correctness, regressions, security,
+  and project conventions.
+---
+
 # Review Pull Request
 
 Review a GitHub pull request thoroughly and provide actionable feedback.
 
-**PR**: $ARGUMENTS
+**PR**: the pull request number or URL supplied in the request
 
 ## Instructions
 
@@ -21,7 +27,7 @@ Review a GitHub pull request thoroughly and provide actionable feedback.
 ### Code Quality
 - TypeScript types are correct (no unjustified `any`)
 - Error handling is appropriate
-- Follows project conventions (see CLAUDE.md)
+- Follows project conventions (see AGENTS.md)
 
 ### React & Performance
 - Hooks follow rules of hooks with correct dependency arrays

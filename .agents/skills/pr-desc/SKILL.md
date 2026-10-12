@@ -1,3 +1,8 @@
+---
+name: pr-desc
+description: Draft a pull request title and description from the current branch changes.
+---
+
 # Generate PR Title & Description
 
 Analyze the current branch changes and generate a PR title and description.

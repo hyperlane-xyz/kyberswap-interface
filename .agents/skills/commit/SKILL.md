@@ -1,3 +1,9 @@
+---
+name: commit
+description: Suggest a Conventional Commit message for staged or unstaged changes
+  without committing.
+---
+
 # Generate Commit Message
 
 Analyze the current changes and suggest a commit message.

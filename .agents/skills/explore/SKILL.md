@@ -1,14 +1,19 @@
+---
+name: explore
+description: Analyze and explain a requested directory, feature, or area of the codebase.
+---
+
 # Explore Codebase
 
 Analyze and explain the specified area of the codebase.
 
-**Target**: $ARGUMENTS
+**Target**: the directory, feature, or files supplied in the request
 
 ## Instructions
 
 - If no target is specified, provide a high-level overview of the project structure
 - If a directory or feature area is specified, dive deep into that area
-- Use the Explore agent for thorough analysis
+- Explore the relevant code thoroughly; use independent agents if the host supports delegation and the task calls for it
 
 ## Output
 
